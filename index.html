@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>每日打卡 - Daily Check-in</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .date-display {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .stats-card {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            text-align: center;
+        }
+        
+        .stat-item {
+            padding: 15px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+            border-radius: 15px;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .habits-grid {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .habit-card {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .habit-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .habit-card.completed {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .habit-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            background: #f5f7fa;
+            flex-shrink: 0;
+        }
+        
+        .habit-card.completed .habit-icon {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .habit-info {
+            flex: 1;
+        }
+        
+        .habit-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .habit-streak {
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+        
+        .check-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 3px solid #ddd;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+        
+        .habit-card.completed .check-btn {
+            border-color: white;
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .check-btn.checked::after {
+            content: '✓';
+            color: white;
+            font-weight: bold;
+        }
+        
+        .progress-ring {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 80px;
+            height: 80px;
+        }
+        
+        .progress-ring svg {
+            transform: rotate(-90deg);
+        }
+        
+        .progress-ring circle {
+            fill: none;
+            stroke-width: 8;
+        }
+        
+        .progress-ring .bg {
+            stroke: rgba(255,255,255,0.3);
+        }
+        
+        .progress-ring .progress {
+            stroke: white;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+        
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .reset-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .reset-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .habit-icon {
+                width: 50px;
+                height: 50px;
+                font-size: 1.5rem;
+            }
+            
+            .habit-name {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌟 每日打卡</h1>
+            <div class="date-display" id="currentDate"></div>
+            <button class="reset-btn" onclick="resetToday()">🔄 重置今日</button>
+        </div>
+        
+        <div class="stats-card">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-number" id="completedCount">0</div>
+                    <div class="stat-label">今日完成</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="totalCount">8</div>
+                    <div class="stat-label">总项目</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="completionRate">0%</div>
+                    <div class="stat-label">完成率</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="habits-grid" id="habitsGrid"></div>
+    </div>
+    
+    <div class="progress-ring">
+        <svg width="80" height="80">
+            <circle class="bg" cx="40" cy="40" r="32"></circle>
+            <circle class="progress" cx="40" cy="40" r="32" 
+                    stroke-dasharray="201" stroke-dashoffset="201" id="progressCircle"></circle>
+        </svg>
+        <div class="progress-text" id="progressText">0%</div>
+    </div>
+
+    <script>
+        const habits = [
+            { id: 1, name: '早睡', icon: '🌙', streak: 0 },
+            { id: 2, name: '运动', icon: '💪', streak: 0 },
+            { id: 3, name: '晒太阳', icon: '☀️', streak: 0 },
+            { id: 4, name: '饮食清淡', icon: '🥗', streak: 0 },
+            { id: 5, name: '学粤语', icon: '🗣️', streak: 0 },
+            { id: 6, name: '看书', icon: '📚', streak: 0 },
+            { id: 7, name: '考试准备', icon: '✍️', streak: 0 },
+            { id: 8, name: '审美提升', icon: '🎨', streak: 0 }
+        ];
+        
+        let todayStatus = {};
+        let streakData = {};
+        
+        function init() {
+            loadData();
+            updateDate();
+            renderHabits();
+            updateStats();
+        }
+        
+        function loadData() {
+            const today = getTodayKey();
+            const saved = localStorage.getItem('checkin_' + today);
+            if (saved) {
+                todayStatus = JSON.parse(saved);
+            }
+            
+            const streaks = localStorage.getItem('streaks');
+            if (streaks) {
+                streakData = JSON.parse(streaks);
+            }
+            
+            // Initialize streaks for new habits
+            habits.forEach(h => {
+                if (!streakData[h.id]) {
+                    streakData[h.id] = 0;
+                }
+            });
+        }
+        
+        function saveData() {
+            const today = getTodayKey();
+            localStorage.setItem('checkin_' + today, JSON.stringify(todayStatus));
+            localStorage.setItem('streaks', JSON.stringify(streakData));
+        }
+        
+        function getTodayKey() {
+            return new Date().toISOString().split('T')[0];
+        }
+        
+        function updateDate() {
+            const now = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+            document.getElementById('currentDate').textContent = now.toLocaleDateString('zh-CN', options);
+        }
+        
+        function renderHabits() {
+            const grid = document.getElementById('habitsGrid');
+            grid.innerHTML = habits.map(habit => {
+                const isCompleted = todayStatus[habit.id];
+                const streak = streakData[habit.id] || 0;
+                return `
+                    <div class="habit-card ${isCompleted ? 'completed' : ''}" onclick="toggleHabit(${habit.id})">
+                        <div class="habit-icon">${habit.icon}</div>
+                        <div class="habit-info">
+                            <div class="habit-name">${habit.name}</div>
+                            <div class="habit-streak">🔥 连续 ${streak} 天</div>
+                        </div>
+                        <div class="check-btn ${isCompleted ? 'checked' : ''}"></div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function toggleHabit(id) {
+            if (todayStatus[id]) {
+                delete todayStatus[id];
+            } else {
+                todayStatus[id] = true;
+            }
+            saveData();
+            renderHabits();
+            updateStats();
+        }
+        
+        function updateStats() {
+            const completed = Object.keys(todayStatus).length;
+            const total = habits.length;
+            const rate = Math.round((completed / total) * 100);
+            
+            document.getElementById('completedCount').textContent = completed;
+            document.getElementById('completionRate').textContent = rate + '%';
+            document.getElementById('progressText').textContent = rate + '%';
+            
+            // Update progress ring
+            const circle = document.getElementById('progressCircle');
+            const circumference = 2 * Math.PI * 32;
+            const offset = circumference - (rate / 100) * circumference;
+            circle.style.strokeDashoffset = offset;
+        }
+        
+        function resetToday() {
+            if (confirm('确定要重置今日所有打卡吗？')) {
+                todayStatus = {};
+                saveData();
+                renderHabits();
+                updateStats();
+            }
+        }
+        
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
