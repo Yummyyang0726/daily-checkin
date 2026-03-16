@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>每日打卡 - Daily Check-in</title>
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
     <style>
         * {
             margin: 0;
@@ -159,11 +156,6 @@
         .habit-card.completed {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-        }
-        
-        .habit-card.syncing {
-            opacity: 0.7;
-            pointer-events: none;
         }
         
         .habit-icon {
@@ -353,63 +345,6 @@
             content: '💡 ';
         }
         
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal.active {
-            display: flex;
-        }
-        
-        .modal-content {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            max-width: 500px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-        
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .modal-header h2 {
-            color: #333;
-        }
-        
-        .close-btn {
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: #999;
-        }
-        
-        .data-textarea {
-            width: 100%;
-            min-height: 200px;
-            padding: 15px;
-            border: 2px solid #eee;
-            border-radius: 10px;
-            font-family: monospace;
-            font-size: 0.85rem;
-            resize: vertical;
-        }
-        
         .progress-ring {
             position: fixed;
             bottom: 30px;
@@ -482,7 +417,7 @@
         <div class="header">
             <h1>🌟 每日打卡</h1>
             <div class="date-display" id="currentDate"></div>
-            <div class="sync-status offline" id="syncStatus">未连接</div>
+            <div class="sync-status offline" id="syncStatus">本地模式</div>
         </div>
         
         <div class="user-section">
@@ -557,21 +492,7 @@
     </div>
 
     <script>
-        // Firebase 配置
-        const firebaseConfig = {
-            apiKey: "AIzaSyDummyKeyForDailyCheckin",
-            authDomain: "daily-checkin-39918.firebaseapp.com",
-            databaseURL: "https://daily-checkin-39918-default-rtdb.firebaseio.com",
-            projectId: "daily-checkin-39918",
-            storageBucket: "daily-checkin-39918.appspot.com",
-            messagingSenderId: "39918",
-            appId: "1:39918:web:dailycheckin"
-        };
-        
-        // 初始化 Firebase
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-        
+        // 使用 localStorage + 导出/导入实现跨设备同步
         const habits = [
             { id: 1, name: '早睡', icon: '🌙', streak: 0 },
             { id: 2, name: '运动', icon: '💪', streak: 0 },
@@ -585,15 +506,13 @@
         
         let currentUser = null;
         let todayStatus = {};
-        let userDataRef = null;
-        let isSyncing = false;
+        let userData = { history: {}, streaks: {} };
         
         function init() {
             updateDate();
             renderHabits();
             updateStats();
             
-            // 检查本地存储的用户
             const savedUser = localStorage.getItem('checkin_user');
             if (savedUser) {
                 document.getElementById('userId').value = savedUser;
@@ -611,51 +530,40 @@
             currentUser = userId;
             localStorage.setItem('checkin_user', userId);
             
-            // 连接 Firebase
-            userDataRef = database.ref('users/' + userId);
+            // 从 localStorage 加载该用户的数据
+            const savedData = localStorage.getItem('checkin_data_' + userId);
+            if (savedData) {
+                userData = JSON.parse(savedData);
+            } else {
+                userData = { history: {}, streaks: {} };
+            }
             
-            updateSyncStatus('syncing');
+            const today = getTodayKey();
+            todayStatus = userData.history[today] || {};
             
-            // 监听数据变化
-            userDataRef.on('value', (snapshot) => {
-                const data = snapshot.val() || {};
-                const today = getTodayKey();
-                
-                // 获取今日数据
-                if (data.history && data.history[today]) {
-                    todayStatus = data.history[today];
-                } else {
-                    todayStatus = {};
-                }
-                
-                // 更新习惯连续天数
-                if (data.streaks) {
-                    habits.forEach(h => {
-                        h.streak = data.streaks[h.id] || 0;
-                    });
-                }
-                
-                updateSyncStatus('synced');
-                renderHabits();
-                updateStats();
-                renderAnalysis(data);
-            }, (error) => {
-                console.error('Sync error:', error);
-                updateSyncStatus('offline');
+            habits.forEach(h => {
+                h.streak = userData.streaks[h.id] || 0;
             });
+            
+            updateSyncStatus('synced');
+            renderHabits();
+            updateStats();
+            renderAnalysis();
+        }
+        
+        function saveUserData() {
+            const today = getTodayKey();
+            userData.history[today] = todayStatus;
+            
+            if (currentUser) {
+                localStorage.setItem('checkin_data_' + currentUser, JSON.stringify(userData));
+            }
         }
         
         function updateSyncStatus(status) {
             const el = document.getElementById('syncStatus');
             el.className = 'sync-status ' + status;
-            
-            if (status === 'syncing') {
-                el.textContent = '同步中...';
-            } else if (status === 'synced') {
-                el.textContent = '已同步';
-            } else {
-                el.textContent = '离线';
-            }
+            el.textContent = status === 'synced' ? '已连接' : '本地模式';
         }
         
         function getTodayKey() {
@@ -673,8 +581,8 @@
             grid.innerHTML = habits.map(habit => {
                 const isCompleted = todayStatus[habit.id];
                 return `
-                    <div class="habit-card ${isCompleted ? 'completed' : ''} ${isSyncing ? 'syncing' : ''}" 
-                         onclick="toggleHabit(${habit.id})" id="habit-${habit.id}">
+                    <div class="habit-card ${isCompleted ? 'completed' : ''}" 
+                         onclick="toggleHabit(${habit.id})">
                         <div class="habit-icon">${habit.icon}</div>
                         <div class="habit-info">
                             <div class="habit-name">${habit.name}</div>
@@ -687,69 +595,27 @@
         }
         
         function toggleHabit(id) {
-            if (!currentUser || !userDataRef) {
-                alert('请先输入用户名并连接');
-                return;
+            if (todayStatus[id]) {
+                delete todayStatus[id];
+            } else {
+                todayStatus[id] = true;
             }
             
-            isSyncing = true;
+            // 更新连续天数
+            const habit = habits.find(h => h.id === id);
+            if (habit) {
+                if (todayStatus[id]) {
+                    habit.streak = (habit.streak || 0) + 1;
+                } else {
+                    habit.streak = Math.max(0, (habit.streak || 0) - 1);
+                }
+                userData.streaks[id] = habit.streak;
+            }
+            
+            saveUserData();
             renderHabits();
-            updateSyncStatus('syncing');
-            
-            const today = getTodayKey();
-            const newStatus = { ...todayStatus };
-            
-            if (newStatus[id]) {
-                delete newStatus[id];
-            } else {
-                newStatus[id] = true;
-            }
-            
-            // 更新 Firebase
-            userDataRef.child('history/' + today).set(newStatus)
-                .then(() => {
-                    // 更新连续天数
-                    return updateStreak(id, !!newStatus[id]);
-                })
-                .then(() => {
-                    isSyncing = false;
-                    updateSyncStatus('synced');
-                })
-                .catch((error) => {
-                    console.error('Update failed:', error);
-                    isSyncing = false;
-                    updateSyncStatus('offline');
-                });
-        }
-        
-        function updateStreak(habitId, completed) {
-            const habit = habits.find(h => h.id === habitId);
-            if (!habit) return Promise.resolve();
-            
-            let newStreak = habit.streak || 0;
-            
-            if (completed) {
-                // 检查昨天是否完成
-                const yesterday = new Date();
-                yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayKey = yesterday.toISOString().split('T')[0];
-                
-                return userDataRef.child('history/' + yesterdayKey + '/' + habitId).once('value')
-                    .then((snapshot) => {
-                        if (snapshot.val()) {
-                            newStreak++;
-                        } else {
-                            newStreak = 1;
-                        }
-                        habit.streak = newStreak;
-                        return userDataRef.child('streaks/' + habitId).set(newStreak);
-                    });
-            } else {
-                // 取消完成，重置连续天数
-                newStreak = 0;
-                habit.streak = 0;
-                return userDataRef.child('streaks/' + habitId).set(0);
-            }
+            updateStats();
+            renderAnalysis();
         }
         
         function updateStats() {
@@ -761,27 +627,22 @@
             document.getElementById('completionRate').textContent = rate + '%';
             document.getElementById('progressText').textContent = rate + '%';
             
+            const totalDays = Object.keys(userData.history).length;
+            document.getElementById('totalDays').textContent = totalDays;
+            
             const circle = document.getElementById('progressCircle');
             const circumference = 2 * Math.PI * 32;
             const offset = circumference - (rate / 100) * circumference;
             circle.style.strokeDashoffset = offset;
         }
         
-        function renderAnalysis(data) {
-            if (!data || !data.history) {
-                document.getElementById('insightsList').innerHTML = '<li>数据加载中...</li>';
-                return;
-            }
-            
-            renderWeeklyChart(data.history);
-            renderHabitChart(data.history);
-            generateInsights(data);
-            
-            const totalDays = Object.keys(data.history).length;
-            document.getElementById('totalDays').textContent = totalDays;
+        function renderAnalysis() {
+            renderWeeklyChart();
+            renderHabitChart();
+            generateInsights();
         }
         
-        function renderWeeklyChart(history) {
+        function renderWeeklyChart() {
             const chart = document.getElementById('weeklyChart');
             const days = [];
             
@@ -789,7 +650,7 @@
                 const d = new Date();
                 d.setDate(d.getDate() - i);
                 const key = d.toISOString().split('T')[0];
-                const dayData = history[key] || {};
+                const dayData = userData.history[key] || {};
                 const completed = Object.keys(dayData).length;
                 const rate = Math.round((completed / habits.length) * 100);
                 
@@ -808,7 +669,7 @@
             `).join('');
         }
         
-        function renderHabitChart(history) {
+        function renderHabitChart() {
             const chart = document.getElementById('habitChart');
             const habitCounts = {};
             
@@ -817,7 +678,7 @@
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             
-            Object.entries(history).forEach(([date, dayData]) => {
+            Object.entries(userData.history).forEach(([date, dayData]) => {
                 if (new Date(date) >= thirtyDaysAgo) {
                     Object.keys(dayData).forEach(habitId => {
                         if (habitCounts[habitId] !== undefined) {
@@ -842,9 +703,9 @@
             }).join('');
         }
         
-        function generateInsights(data) {
+        function generateInsights() {
             const insights = [];
-            const history = data.history || {};
+            const history = userData.history || {};
             const totalDays = Object.keys(history).length;
             
             if (totalDays === 0) {
@@ -912,14 +773,12 @@
         }
         
         function resetToday() {
-            if (!currentUser || !userDataRef) {
-                alert('请先连接用户');
-                return;
-            }
-            
             if (confirm('确定要重置今日所有打卡吗？')) {
-                const today = getTodayKey();
-                userDataRef.child('history/' + today).remove();
+                todayStatus = {};
+                saveUserData();
+                renderHabits();
+                updateStats();
+                renderAnalysis();
             }
         }
         
