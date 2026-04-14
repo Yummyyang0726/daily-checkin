@@ -580,6 +580,8 @@
     </div>
 
     <script>
+        const API_BASE = 'https://daily-checkin-api.yummyyang0726.workers.dev';
+
         const DEFAULT_HABITS = [
             { id: 1, name: '早睡', icon: '🌙' },
             { id: 2, name: '运动', icon: '💪' },
@@ -611,6 +613,7 @@
 
         function saveHabits() {
             localStorage.setItem('checkin_habits', JSON.stringify(habits));
+            syncToCloud();
         }
 
         function init() {
@@ -625,7 +628,7 @@
             }
         }
 
-        function connectUser() {
+        async function connectUser() {
             const userId = document.getElementById('userId').value.trim().toLowerCase();
             if (!userId) {
                 alert('请输入用户名');
@@ -633,17 +636,64 @@
             }
             currentUser = userId;
             localStorage.setItem('checkin_user', userId);
-            const savedData = localStorage.getItem('checkin_data_' + userId);
-            if (savedData) {
-                userData = JSON.parse(savedData);
+            updateSyncStatus('syncing');
+
+            // 先从云端拉数据
+            let remoteData = null;
+            try {
+                const res = await fetch(`${API_BASE}/api/data/${userId}`);
+                if (res.ok) {
+                    remoteData = await res.json();
+                }
+            } catch (e) { /* 离线模式 */ }
+
+            // 本地数据
+            const localRaw = localStorage.getItem('checkin_data_' + userId);
+            const localData = localRaw ? JSON.parse(localRaw) : null;
+
+            // 合并：取历史记录更多的那个为基础，再合并另一个的记录
+            if (remoteData && remoteData.history && Object.keys(remoteData.history).length > 0) {
+                if (localData && localData.history) {
+                    // 合并两边的历史
+                    userData = { history: { ...remoteData.history, ...localData.history }, streaks: { ...remoteData.streaks, ...localData.streaks } };
+                    // 对于两边都有的日期，取打卡项更多的
+                    for (const date in remoteData.history) {
+                        if (localData.history[date]) {
+                            const remoteCount = Object.keys(remoteData.history[date]).length;
+                            const localCount = Object.keys(localData.history[date]).length;
+                            userData.history[date] = remoteCount >= localCount ? remoteData.history[date] : localData.history[date];
+                        }
+                    }
+                } else {
+                    userData = remoteData;
+                }
+            } else if (localData) {
+                userData = localData;
             } else {
                 userData = { history: {}, streaks: {} };
             }
+
+            // 同步习惯列表
+            if (remoteData && remoteData.habits && remoteData.habits.length > 0) {
+                const localHabits = localStorage.getItem('checkin_habits');
+                if (!localHabits) {
+                    habits = remoteData.habits;
+                    saveHabits();
+                }
+            }
+
             const today = getTodayKey();
             todayStatus = userData.history[today] || {};
             habits.forEach(h => {
                 h.streak = userData.streaks[h.id] || 0;
             });
+
+            // 保存到本地
+            localStorage.setItem('checkin_data_' + userId, JSON.stringify(userData));
+
+            // 同步到云端
+            await syncToCloud();
+
             updateSyncStatus('synced');
             renderHabits();
             updateStats();
@@ -655,13 +705,35 @@
             userData.history[today] = todayStatus;
             if (currentUser) {
                 localStorage.setItem('checkin_data_' + currentUser, JSON.stringify(userData));
+                syncToCloud();
+            }
+        }
+
+        async function syncToCloud() {
+            if (!currentUser) return;
+            try {
+                updateSyncStatus('syncing');
+                const payload = {
+                    history: userData.history,
+                    streaks: userData.streaks,
+                    habits: habits
+                };
+                await fetch(`${API_BASE}/api/data/${currentUser}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                updateSyncStatus('synced');
+            } catch (e) {
+                updateSyncStatus('offline');
             }
         }
 
         function updateSyncStatus(status) {
             const el = document.getElementById('syncStatus');
             el.className = 'sync-status ' + status;
-            el.textContent = status === 'synced' ? '已连接' : '本地模式';
+            const labels = { synced: '已同步', syncing: '同步中...', offline: '离线模式' };
+            el.textContent = labels[status] || status;
         }
 
         function getTodayKey() {
