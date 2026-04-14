@@ -738,8 +738,8 @@
 
         function updateSyncStatus(status) {
             const el = document.getElementById('syncStatus');
-            el.className = 'sync-status ' + status;
-            const labels = { synced: '已同步', syncing: '同步中...', offline: '离线模式' };
+            el.className = 'sync-status ' + (status === 'offline' ? 'synced' : status);
+            const labels = { synced: '已同步', syncing: '连接中...', offline: '本地模式' };
             el.textContent = labels[status] || status;
         }
 
