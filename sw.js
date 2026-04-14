@@ -1,4 +1,4 @@
-const CACHE_NAME = 'checkin-v2';
+const CACHE_NAME = 'checkin-v3';
 const ASSETS = [
   '/daily-checkin/',
   '/daily-checkin/index.html',

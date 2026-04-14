@@ -582,6 +582,13 @@
     <script>
         const API_BASE = 'https://daily-checkin-api.yummyyang0726.workers.dev';
 
+        function fetchWithTimeout(url, options = {}, timeout = 3000) {
+            return Promise.race([
+                fetch(url, options),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
+            ]);
+        }
+
         const DEFAULT_HABITS = [
             { id: 1, name: '早睡', icon: '🌙' },
             { id: 2, name: '运动', icon: '💪' },
@@ -638,14 +645,14 @@
             localStorage.setItem('checkin_user', userId);
             updateSyncStatus('syncing');
 
-            // 先从云端拉数据
+            // 先从云端拉数据（3秒超时）
             let remoteData = null;
             try {
-                const res = await fetch(`${API_BASE}/api/data/${userId}`);
+                const res = await fetchWithTimeout(`${API_BASE}/api/data/${userId}`);
                 if (res.ok) {
                     remoteData = await res.json();
                 }
-            } catch (e) { /* 离线模式 */ }
+            } catch (e) { /* 超时或离线，降级到本地 */ }
 
             // 本地数据
             const localRaw = localStorage.getItem('checkin_data_' + userId);
@@ -691,13 +698,13 @@
             // 保存到本地
             localStorage.setItem('checkin_data_' + userId, JSON.stringify(userData));
 
-            // 同步到云端
-            await syncToCloud();
-
-            updateSyncStatus('synced');
+            // 先渲染页面，不阻塞用户操作
             renderHabits();
             updateStats();
             renderAnalysis();
+
+            // 后台同步到云端
+            syncToCloud();
         }
 
         function saveUserData() {
@@ -718,7 +725,7 @@
                     streaks: userData.streaks,
                     habits: habits
                 };
-                await fetch(`${API_BASE}/api/data/${currentUser}`, {
+                await fetchWithTimeout(`${API_BASE}/api/data/${currentUser}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
