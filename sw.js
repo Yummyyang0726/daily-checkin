@@ -1,10 +1,9 @@
-const CACHE_NAME = 'checkin-v1';
+const CACHE_NAME = 'checkin-v2';
 const ASSETS = [
   '/daily-checkin/',
   '/daily-checkin/index.html',
   '/daily-checkin/manifest.json',
-  '/daily-checkin/icon-192.png',
-  '/daily-checkin/icon-512.png'
+  '/daily-checkin/icon.svg'
 ];
 
 self.addEventListener('install', event => {
@@ -24,6 +23,10 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  // 不缓存 API 请求
+  if (event.request.url.includes('workers.dev')) {
+    return;
+  }
   event.respondWith(
     fetch(event.request)
       .then(response => {
