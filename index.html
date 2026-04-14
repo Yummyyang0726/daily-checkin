@@ -214,6 +214,38 @@
             font-weight: bold;
         }
 
+        .delete-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(231, 76, 60, 0.1);
+            color: #e74c3c;
+            font-size: 1rem;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s ease;
+        }
+
+        .delete-btn:hover {
+            background: rgba(231, 76, 60, 0.2);
+        }
+
+        .editing .delete-btn {
+            display: flex;
+        }
+
+        .editing .habit-card {
+            cursor: default;
+        }
+
+        .editing .habit-card:hover {
+            transform: none;
+        }
+
         .action-buttons {
             display: flex;
             gap: 10px;
@@ -243,9 +275,59 @@
             color: white;
         }
 
+        .btn-danger {
+            background: rgba(231, 76, 60, 0.2);
+            color: white;
+        }
+
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .add-habit-card {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .add-habit-card.show {
+            display: block;
+        }
+
+        .add-habit-card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .add-habit-form {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .add-habit-form input {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px 14px;
+            border: 2px solid #eee;
+            border-radius: 10px;
+            font-size: 0.95rem;
+        }
+
+        .add-habit-form input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .emoji-input {
+            max-width: 60px;
+            text-align: center;
+            font-size: 1.3rem;
         }
 
         .analysis-section {
@@ -431,7 +513,7 @@
                     <div class="stat-label">今日完成</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-number" id="totalHabits">10</div>
+                    <div class="stat-number" id="totalHabits">0</div>
                     <div class="stat-label">总项目</div>
                 </div>
                 <div class="stat-item">
@@ -447,6 +529,17 @@
 
         <div class="action-buttons">
             <button class="btn btn-secondary" onclick="resetToday()">🔄 重置今日</button>
+            <button class="btn btn-secondary" onclick="toggleAddHabit()">➕ 添加习惯</button>
+            <button class="btn btn-secondary" id="editBtn" onclick="toggleEditMode()">✏️ 管理习惯</button>
+        </div>
+
+        <div class="add-habit-card" id="addHabitCard">
+            <h3>➕ 添加新习惯</h3>
+            <div class="add-habit-form">
+                <input type="text" class="emoji-input" id="newHabitIcon" placeholder="🎯" maxlength="2">
+                <input type="text" id="newHabitName" placeholder="习惯名称">
+                <button class="btn btn-primary" onclick="addHabit()">添加</button>
+            </div>
         </div>
 
         <div class="habits-grid" id="habitsGrid"></div>
@@ -480,23 +573,41 @@
     </div>
 
     <script>
-        const habits = [
-            { id: 1, name: '早睡', icon: '🌙', streak: 0 },
-            { id: 2, name: '运动', icon: '💪', streak: 0 },
-            { id: 3, name: '晒太阳', icon: '☀️', streak: 0 },
-            { id: 4, name: '饮食清淡', icon: '🥗', streak: 0 },
-            { id: 5, name: '学粤语', icon: '🗣️', streak: 0 },
-            { id: 6, name: '看书', icon: '📚', streak: 0 },
-            { id: 8, name: '审美提升', icon: '🎨', streak: 0 },
-            { id: 9, name: '喝水 2L', icon: '💧', streak: 0 },
-            { id: 10, name: '早起', icon: '⏰', streak: 0 }
+        const DEFAULT_HABITS = [
+            { id: 1, name: '早睡', icon: '🌙' },
+            { id: 2, name: '运动', icon: '💪' },
+            { id: 3, name: '晒太阳', icon: '☀️' },
+            { id: 4, name: '饮食清淡', icon: '🥗' },
+            { id: 5, name: '学粤语', icon: '🗣️' },
+            { id: 6, name: '看书', icon: '📚' },
+            { id: 8, name: '审美提升', icon: '🎨' },
+            { id: 9, name: '喝水 2L', icon: '💧' },
+            { id: 10, name: '早起', icon: '⏰' },
+            { id: 11, name: '拉伸', icon: '🧘' }
         ];
 
+        let habits = [];
         let currentUser = null;
         let todayStatus = {};
         let userData = { history: {}, streaks: {} };
+        let editMode = false;
+
+        function loadHabits() {
+            const saved = localStorage.getItem('checkin_habits');
+            if (saved) {
+                habits = JSON.parse(saved);
+            } else {
+                habits = DEFAULT_HABITS.map(h => ({ ...h, streak: 0 }));
+                saveHabits();
+            }
+        }
+
+        function saveHabits() {
+            localStorage.setItem('checkin_habits', JSON.stringify(habits));
+        }
 
         function init() {
+            loadHabits();
             updateDate();
             renderHabits();
             updateStats();
@@ -561,19 +672,21 @@
             grid.innerHTML = habits.map(habit => {
                 const isCompleted = todayStatus[habit.id];
                 return `
-                    <div class="habit-card ${isCompleted ? 'completed' : ''}" onclick="toggleHabit(${habit.id})">
+                    <div class="habit-card ${isCompleted ? 'completed' : ''}" onclick="${editMode ? '' : 'toggleHabit(' + habit.id + ')'}">
                         <div class="habit-icon">${habit.icon}</div>
                         <div class="habit-info">
                             <div class="habit-name">${habit.name}</div>
                             <div class="habit-streak">🔥 连续 ${habit.streak || 0} 天</div>
                         </div>
                         <div class="check-btn ${isCompleted ? 'checked' : ''}"></div>
+                        <button class="delete-btn" onclick="event.stopPropagation(); deleteHabit(${habit.id})">✕</button>
                     </div>
                 `;
             }).join('');
         }
 
         function toggleHabit(id) {
+            if (editMode) return;
             if (todayStatus[id]) {
                 delete todayStatus[id];
             } else {
@@ -594,10 +707,63 @@
             renderAnalysis();
         }
 
+        function toggleAddHabit() {
+            const card = document.getElementById('addHabitCard');
+            card.classList.toggle('show');
+            if (card.classList.contains('show')) {
+                document.getElementById('newHabitName').focus();
+            }
+        }
+
+        function addHabit() {
+            const name = document.getElementById('newHabitName').value.trim();
+            const icon = document.getElementById('newHabitIcon').value.trim() || '🎯';
+            if (!name) {
+                alert('请输入习惯名称');
+                return;
+            }
+            const maxId = habits.reduce((max, h) => Math.max(max, h.id), 0);
+            habits.push({ id: maxId + 1, name, icon, streak: 0 });
+            saveHabits();
+            document.getElementById('newHabitName').value = '';
+            document.getElementById('newHabitIcon').value = '';
+            document.getElementById('addHabitCard').classList.remove('show');
+            renderHabits();
+            updateStats();
+            renderAnalysis();
+        }
+
+        function deleteHabit(id) {
+            const habit = habits.find(h => h.id === id);
+            if (!habit) return;
+            if (!confirm(`确定要删除「${habit.name}」吗？`)) return;
+            habits = habits.filter(h => h.id !== id);
+            delete todayStatus[id];
+            saveHabits();
+            saveUserData();
+            renderHabits();
+            updateStats();
+            renderAnalysis();
+        }
+
+        function toggleEditMode() {
+            editMode = !editMode;
+            const grid = document.getElementById('habitsGrid');
+            const btn = document.getElementById('editBtn');
+            if (editMode) {
+                grid.classList.add('editing');
+                btn.textContent = '✅ 完成管理';
+            } else {
+                grid.classList.remove('editing');
+                btn.textContent = '✏️ 管理习惯';
+            }
+            renderHabits();
+        }
+
         function updateStats() {
             const completed = Object.keys(todayStatus).length;
             const total = habits.length;
-            const rate = Math.round((completed / total) * 100);
+            const rate = total === 0 ? 0 : Math.round((completed / total) * 100);
             document.getElementById('completedCount').textContent = completed;
             document.getElementById('totalHabits').textContent = total;
             document.getElementById('completionRate').textContent = rate + '%';
@@ -625,7 +791,7 @@
                 const key = d.toISOString().split('T')[0];
                 const dayData = userData.history[key] || {};
                 const completed = Object.keys(dayData).length;
-                const rate = Math.round((completed / habits.length) * 100);
+                const rate = habits.length === 0 ? 0 : Math.round((completed / habits.length) * 100);
                 days.push({
                     label: i === 0 ? '今天' : `${d.getMonth()+1}/${d.getDate()}`,
                     value: rate
@@ -734,6 +900,11 @@
                 renderAnalysis();
             }
         }
+
+        // Enter 键添加习惯
+        document.getElementById('newHabitName').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') addHabit();
+        });
 
         init();
     </script>
